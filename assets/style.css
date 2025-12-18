@@ -2,7 +2,7 @@
 
 body,
 body * {
-  font-family: Comic Sans !important;
+  font-family: calibri !important;
 }
 
 body {
@@ -133,8 +133,9 @@ a {
 .markdown-body *,
 .container,
 .container * {
-  font-family: Comic Sans !important;
+  font-family: calibri !important;
 }
+
 
 
 
