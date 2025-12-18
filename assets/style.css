@@ -3,7 +3,7 @@
 
 body,
 body * {
-  font-family: Georgia !important;
+  font-family: Comic Sans !important;
 }
 
 body {
@@ -127,6 +127,7 @@ a {
   border: 1px solid var(--text-color);
   border-radius: 4px;
 }
+
 
 
 
