@@ -1,24 +1,26 @@
----
+e---
 layout: default
 title: Research
 ---
 
 ## Research Interests
 
-- Political Institutions  
-- Public Policy  
+- Public Opinion
+- Political Behavior
+- Voting
+- Elections 
+- Representation  
 - Quantitative Methods  
-- Democratic Accountability  
 
 ---
 
 ## Publications
 
-- Author. Year. “Article Title.” *Journal Name*.
+- To Come
 
 ---
 
 ## Working Papers
 
-**Paper Title**  
-Brief description of the research question, method, and contribution.
+- To Come
+
