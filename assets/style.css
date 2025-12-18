@@ -1,9 +1,5 @@
 /* Faculty-style academic design */
 
-html {
-  background: red !important;
-}
-
 body,
 body * {
   font-family: Comic Sans !important;
@@ -130,6 +126,7 @@ a {
   border: 1px solid var(--text-color);
   border-radius: 4px;
 }
+
 
 
 
