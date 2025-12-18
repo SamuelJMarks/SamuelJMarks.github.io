@@ -1,30 +1,5 @@
 /* Faculty-style academic design */
 
-<style>
-  :root {
-    --bg-color: #ffffff;
-    --text-color: #000000;
-  }
-
-  [data-theme="dark"] {
-    --bg-color: #121212;
-    --text-color: #f0f0f0;
-  }
-
-  body {
-    background-color: var(--bg-color);
-    color: var(--text-color);
-    transition: background-color 0.3s, color 0.3s;
-  }
-
-  #theme-toggle {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    cursor: pointer;
-  }
-</style>
-
 
 body {
   font-family: Georgia, "Times New Roman", serif;
@@ -116,4 +91,35 @@ footer {
 }
 
 
+/* Light/Dark Mode Variables and Styles */
+:root {
+  --bg-color: #ffffff;
+  --text-color: #000000;
+}
+
+[data-theme="dark"] {
+  --bg-color: #121212;
+  --text-color: #f0f0f0;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s, color 0.3s;
+}
+
+a {
+  color: var(--text-color);
+}
+
+#theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--text-color);
+  border-radius: 4px;
+}
 
