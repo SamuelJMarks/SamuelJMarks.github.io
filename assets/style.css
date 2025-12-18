@@ -2,7 +2,7 @@
 
 
 body {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: Georgia;
   background-color: #ffffff;
   color: #111;
   margin: 0;
@@ -122,4 +122,5 @@ a {
   border: 1px solid var(--text-color);
   border-radius: 4px;
 }
+
 
