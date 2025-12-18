@@ -5,28 +5,14 @@ title: CV
 
 ## Education
 
-- **Ph.D.**, Political Science — University Name, Year  
-- **M.A.**, Political Science — University Name, Year  
-- **B.A.**, Political Science — University Name, Year  
+- **Ph.D.**, Political Science — Pennsylvania State University, 2030  
+- **M.A.**, Political Science — Pennsylvania State University, 2027
+- **M.P.A.**, Public Administration - Binghamton University, 2024 
+- **B.A.**, Political Science — Binghamton University, 2023   
 
 ---
-
-## Academic Appointments
-
-- Assistant Professor, Political Science, University Name (Year–Present)
-
----
-
-## Publications
-
-- Author. Year. “Article Title.” *Journal Name*.
-
----
-
-## Working Papers
-
-- “Title of Working Paper.” Under review.
 
 ---
 
 [Download CV (PDF)](cv.pdf)
+
