@@ -129,6 +129,13 @@ a {
 
 
 
+.markdown-body,
+.markdown-body *,
+.container,
+.container * {
+  font-family: Georgia !important;
+}
+
 
 
 
