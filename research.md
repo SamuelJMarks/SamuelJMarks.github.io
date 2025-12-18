@@ -1,4 +1,4 @@
-e---
+---
 layout: default
 title: Research
 ---
@@ -23,4 +23,5 @@ title: Research
 ## Working Papers
 
 - To Come
+
 
