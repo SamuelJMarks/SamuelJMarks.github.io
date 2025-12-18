@@ -12,7 +12,6 @@ title: CV
 
 ---
 
----
-
 [Download CV (PDF)](cv.pdf)
+
 
