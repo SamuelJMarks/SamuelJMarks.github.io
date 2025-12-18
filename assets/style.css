@@ -1,8 +1,8 @@
 /* Faculty-style academic design */
 
 
-body {
-  font-family: Georgia;
+body, .container, .content, .markdown-body, h1, h2, h3, h4, h5, h6, p, a, li {
+  font-family: Georgia !important;
   background-color: #ffffff;
   color: #111;
   margin: 0;
@@ -122,5 +122,6 @@ a {
   border: 1px solid var(--text-color);
   border-radius: 4px;
 }
+
 
 
