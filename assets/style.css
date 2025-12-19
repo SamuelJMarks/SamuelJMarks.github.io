@@ -164,6 +164,14 @@ main {
 }
 
 
+main {
+  text-align: left;
+}
+
+main * {
+  text-align: left;
+}
+
 
 
 
