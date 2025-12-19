@@ -149,7 +149,9 @@ body {
 
 main {
   flex: 1;
+  text-align: left;
 }
+
 
 
 
