@@ -86,7 +86,7 @@ main * {
 /* ---------- Headings & lists ---------- */
 h2 {
   font-size: 1.5em;
-  margin-top: 50px;
+  margin-top: 20px;
 }
 
 ul {
@@ -156,5 +156,6 @@ main *,
 main {
   display: block !important;
 }
+
 
 
