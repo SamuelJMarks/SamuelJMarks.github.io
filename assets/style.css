@@ -140,4 +140,21 @@ main *,
 }
 
 
+/* Ensure Markdown content is left-aligned and not affected by container centering */
+.content-wrapper {
+  width: 100%;
+  max-width: 900px;  /* same as container */
+  margin: 0 auto;
+  text-align: left;
+}
+
+.content-wrapper * {
+  text-align: left;
+}
+
+/* Override any flex centering from parent elements */
+main {
+  display: block !important;
+}
+
 
