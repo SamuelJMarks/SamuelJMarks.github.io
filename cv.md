@@ -12,12 +12,21 @@ title: CV
 
 ---
 
-## My CV
+## CV
 
+<!-- Embed PDF -->
 <iframe src="/assets/cv.pdf" width="100%" height="800px" style="border:1px solid #ccc;">
-    This browser does not support PDFs. Please download the PDF to view it: 
-    <a href="/assets/cv.pdf">Download CV</a>.
+    This browser does not support PDFs. You can download it here: 
+    <a href="/assets/cv.pdf" download>Download CV</a>.
 </iframe>
+
+<!-- Direct download link -->
+<p>
+    <a href="/assets/cv.pdf" download style="font-weight: bold; text-decoration: underline;">
+        Download CV as PDF
+    </a>
+</p>
+
 
 
 
