@@ -129,3 +129,15 @@ a {
 .markdown-body * {
   font-family: Calibri, Arial, sans-serif !important;
 }
+
+
+/* FORCE markdown pages to be left-aligned */
+main,
+main *,
+.markdown-body,
+.markdown-body * {
+  text-align: left !important;
+}
+
+
+
