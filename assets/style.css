@@ -6,7 +6,7 @@ body * {
 }
 
 body {
-  background-color: #ffffff;
+  background-color: #FBFAF5;
   color: #111;
   margin: 0;
   line-height: 1.7;
@@ -25,7 +25,7 @@ header {
 
   <style>
   :root {
-    --bg-color: #ffffff;
+    --bg-color: #FBFAF5;
     --text-color: #000000;
   }
 
@@ -97,7 +97,7 @@ footer {
 
 /* Light/Dark Mode Variables and Styles */
 :root {
-  --bg-color: #ffffff;
+  --bg-color: #FBFAF5;
   --text-color: #000000;
 }
 
@@ -135,6 +135,7 @@ a {
 .container * {
   font-family: calibri !important;
 }
+
 
 
 
