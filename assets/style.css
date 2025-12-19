@@ -157,5 +157,11 @@ main {
   display: block !important;
 }
 
+/* Reduce extra space above the first heading on Markdown pages */
+main h1:first-of-type,
+main h2:first-of-type {
+  margin-top: 0.5em;  /* adjust as needed */
+}
+
 
 
