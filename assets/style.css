@@ -1,54 +1,52 @@
-/* Faculty-style academic design */
+/* =====================================================
+   Faculty-style academic design (clean + fixed)
+   ===================================================== */
 
-body,
-body * {
-  font-family: calibri !important;
+/* ---------- Color variables (light / dark) ---------- */
+:root {
+  --bg-color: #FBFAF5;
+  --text-color: #000000;
+}
+
+[data-theme="dark"] {
+  --bg-color: #121212;
+  --text-color: #f0f0f0;
+}
+
+/* ---------- Base document ---------- */
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background-color: #FBFAF5;
-  color: #111;
   margin: 0;
+  background-color: var(--bg-color);
+  color: var(--text-color);
   line-height: 1.7;
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.3s, color 0.3s;
 }
 
+/* ---------- Typography ---------- */
+body,
+body * {
+  font-family: Calibri, Arial, sans-serif !important;
+}
 
+/* ---------- Layout container ---------- */
 .container {
   max-width: 900px;
   margin: 0 auto;
   padding: 0 20px;
 }
 
+/* ---------- Header ---------- */
 header {
   border-bottom: 1px solid #e6e6e6;
   padding: 40px 0 30px 0;
-
-  <style>
-  :root {
-    --bg-color: #FBFAF5;
-    --text-color: #000000;
-  }
-
-  [data-theme="dark"] {
-    --bg-color: #121212;
-    --text-color: #f0f0f0;
-  }
-
-  body {
-    background-color: var(--bg-color);
-    color: var(--text-color);
-    transition: background-color 0.3s, color 0.3s;
-  }
-
-  #theme-toggle {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    padding: 0.3rem 0.6rem;
-    cursor: pointer;
-  }
-</style>
-
+  text-align: center;
 }
 
 h1 {
@@ -62,6 +60,7 @@ h1 {
   margin-bottom: 25px;
 }
 
+/* ---------- Navigation ---------- */
 nav a {
   margin-right: 20px;
   text-decoration: none;
@@ -73,10 +72,18 @@ nav a:hover {
   text-decoration: underline;
 }
 
+/* ---------- Main content ---------- */
 main {
+  flex: 1;
   margin-top: 50px;
+  text-align: left;
 }
 
+main * {
+  text-align: left;
+}
+
+/* ---------- Headings & lists ---------- */
 h2 {
   font-size: 1.5em;
   margin-top: 50px;
@@ -86,36 +93,26 @@ ul {
   padding-left: 20px;
 }
 
-footer {
-  margin-top: 80px;
-  padding-top: 20px;
+/* ---------- Footer ---------- */
+.site-footer {
+  width: 100%;
   border-top: 1px solid #e6e6e6;
+  margin-top: 2rem;
+}
+
+.site-footer .container {
+  padding: 1rem 0;
+  text-align: center;
   font-size: 0.9em;
   color: #666;
 }
 
-
-/* Light/Dark Mode Variables and Styles */
-:root {
-  --bg-color: #FBFAF5;
-  --text-color: #000000;
-}
-
-[data-theme="dark"] {
-  --bg-color: #121212;
-  --text-color: #f0f0f0;
-}
-
-body {
-  background-color: var(--bg-color);
-  color: var(--text-color);
-  transition: background-color 0.3s, color 0.3s;
-}
-
+/* ---------- Links ---------- */
 a {
   color: var(--text-color);
 }
 
+/* ---------- Theme toggle button ---------- */
 #theme-toggle {
   position: fixed;
   top: 1rem;
@@ -127,55 +124,8 @@ a {
   border-radius: 4px;
 }
 
-
-
+/* ---------- Markdown safety ---------- */
 .markdown-body,
-.markdown-body *,
-.container,
-.container * {
-  font-family: calibri !important;
+.markdown-body * {
+  font-family: Calibri, Arial, sans-serif !important;
 }
-
-
-
-html, body {
-  height: 100%;
-}
-
-body {
-  display: flex;
-  flex-direction: column;
-}
-
-main {
-  flex: 1;
-  text-align: left;
-}
-
-
-.site-footer {
-  width: 100%;
-  border-top: 1px solid #ddd;
-  margin-top: 2rem;
-}
-
-.site-footer .container {
-  padding: 1rem 0;
-}
-
-
-main {
-  text-align: left;
-}
-
-main * {
-  text-align: left;
-}
-
-
-
-
-
-
-
-
