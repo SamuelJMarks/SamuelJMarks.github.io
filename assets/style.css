@@ -165,57 +165,54 @@ main h2:first-of-type {
 
 
 /* =====================================================
-   Page layout with left sidebar (oval photo)
+   Two-column layout with academic sidebar
    ===================================================== */
 
 .page-layout {
   display: flex;
   align-items: flex-start;
-  gap: 40px;
-}
-
-/* =====================================================
-   Two-column page layout (sidebar + content)
-   ===================================================== */
-
-.page-layout {
-  display: flex;
-  align-items: flex-start;
-  gap: 40px;
-  width: 100%;
-  max-width: 1100px;
+  gap: 50px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 40px;
 }
 
 /* ---------- Sidebar ---------- */
 .sidebar {
-  width: 200px;
-  flex-shrink: 0;
+  width: 240px;
+  padding-right: 30px;
+  border-right: 1px solid #ddd;
   text-align: center;
 }
 
+/* Oval profile image */
 .profile-pic {
   width: 180px;
-  height: 220px;
+  height: 230px;
   object-fit: cover;
   border-radius: 50%;
-  margin-bottom: 15px;
+  margin-bottom: 20px;
 }
 
+/* Name */
 .sidebar-name {
-  font-weight: bold;
-  letter-spacing: 0.08em;
-  margin-bottom: 8px;
+  font-weight: 700;
+  font-size: 1.2em;
+  margin-bottom: 12px;
 }
 
+/* Email block */
 .sidebar-email {
-  font-size: 0.95em;
+  font-size: 1em;
+  color: #003366;
+}
+
+.sidebar-email a {
   color: #003366;
   text-decoration: none;
 }
 
-.sidebar-email:hover {
+.sidebar-email a:hover {
   text-decoration: underline;
 }
 
@@ -225,7 +222,7 @@ main h2:first-of-type {
   text-align: left;
 }
 
-/* ---------- Mobile: stack vertically ---------- */
+/* ---------- Mobile layout ---------- */
 @media (max-width: 900px) {
   .page-layout {
     flex-direction: column;
@@ -234,6 +231,10 @@ main h2:first-of-type {
 
   .sidebar {
     width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #ddd;
+    padding-right: 0;
+    padding-bottom: 25px;
     margin-bottom: 30px;
   }
 
