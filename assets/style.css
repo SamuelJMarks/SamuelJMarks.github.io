@@ -164,4 +164,68 @@ main h2:first-of-type {
 }
 
 
+/* =====================================================
+   Page layout with left sidebar (oval photo)
+   ===================================================== */
+
+.page-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 40px;
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.profile-pic {
+  width: 180px;
+  height: 220px;        /* oval shape */
+  object-fit: cover;
+  border-radius: 50%;
+  margin-bottom: 15px;
+}
+
+.sidebar-name {
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.sidebar-email {
+  font-size: 0.95em;
+  color: #003366;
+  text-decoration: none;
+}
+
+.sidebar-email:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Main content ---------- */
+.content-wrapper {
+  flex: 1;
+  text-align: left;
+}
+
+/* ---------- Mobile responsiveness ---------- */
+@media (max-width: 768px) {
+  .page-layout {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .sidebar {
+    width: 100%;
+    margin-bottom: 30px;
+  }
+
+  .content-wrapper {
+    width: 100%;
+  }
+}
+
 
