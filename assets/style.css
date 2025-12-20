@@ -188,21 +188,21 @@ main h2:first-of-type {
 /* Oval profile image */
 .profile-pic {
   display: block;
-  width: 190px;
-  height: 250px;
-  max-width: 100%;
+  width: 180px;       /* slightly bigger than original */
+  height: 240px;      /* oval, taller than wide */
+  max-width: 100%;    /* never exceeds sidebar width */
   margin: 0 auto 20px;
 
   object-fit: cover;
 
-  /* True oval */
+  /* True oval shape */
   border-radius: 50% / 60%;
 
-  /* Improve rendering */
+  /* Optional: improve browser rendering */
   image-rendering: auto;
-  image-rendering: -webkit-optimize-contrast;
   transform: translateZ(0);
 }
+
 
 
 
@@ -242,20 +242,21 @@ main h2:first-of-type {
     align-items: center;
   }
 
- .sidebar {
+.sidebar {
   width: 240px;
   max-width: 240px;
   flex-shrink: 0;
-
   padding-right: 30px;
   border-right: 1px solid #ddd;
   text-align: center;
 }
 
+
   .content-wrapper {
     width: 100%;
   }
 }
+
 
 
 
