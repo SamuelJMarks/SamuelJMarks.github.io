@@ -190,17 +190,22 @@ main h2:first-of-type {
   display: block;
   width: 160px;
   height: 210px;
-  max-width: 100%;
-  margin: 0 auto 20px auto;
+  margin: 0 auto 20px;
 
   object-fit: cover;
 
-  /* TRUE OVAL */
+  /* True oval */
   border-radius: 50% / 60%;
 
-  /* Prevent overflow */
-  overflow: hidden;
+  /* Improve scaling quality */
+  image-rendering: auto;
+  image-rendering: -webkit-optimize-contrast;
+
+  /* Prevent browser blur */
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
+
 
 
 /* Name */
@@ -252,4 +257,5 @@ main h2:first-of-type {
     width: 100%;
   }
 }
+
 
