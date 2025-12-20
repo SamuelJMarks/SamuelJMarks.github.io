@@ -28,10 +28,27 @@
 </header>
 
 <main>
-  <div class="content-wrapper container">
-    {{ content }}
+  <div class="page-layout container">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <img src="/assets/profile.jpg" alt="Profile photo" class="profile-pic">
+
+      <div class="sidebar-name">SAMUEL MARKS</div>
+
+      <a href="mailto:sjm8006@psu.edu" class="sidebar-email">
+        sjm8006@psu.edu
+      </a>
+    </aside>
+
+    <!-- Main content -->
+    <div class="content-wrapper">
+      {{ content }}
+    </div>
+
   </div>
 </main>
+
 
 
 <footer class="site-footer">
@@ -70,6 +87,7 @@
   
 </body>
 </html>
+
 
 
 
