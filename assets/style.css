@@ -187,12 +187,21 @@ main h2:first-of-type {
 
 /* Oval profile image */
 .profile-pic {
-  width: 180px;
-  height: 230px;
+  display: block;
+  width: 160px;
+  height: 210px;
+  max-width: 100%;
+  margin: 0 auto 20px auto;
+
   object-fit: cover;
-  border-radius: 50%;
-  margin-bottom: 20px;
+
+  /* TRUE OVAL */
+  border-radius: 50% / 60%;
+
+  /* Prevent overflow */
+  overflow: hidden;
 }
+
 
 /* Name */
 .sidebar-name {
@@ -229,16 +238,18 @@ main h2:first-of-type {
     align-items: center;
   }
 
-  .sidebar {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid #ddd;
-    padding-right: 0;
-    padding-bottom: 25px;
-    margin-bottom: 30px;
-  }
+ .sidebar {
+  width: 240px;
+  max-width: 240px;
+  flex-shrink: 0;
+
+  padding-right: 30px;
+  border-right: 1px solid #ddd;
+  text-align: center;
+}
 
   .content-wrapper {
     width: 100%;
   }
 }
+
