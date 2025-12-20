@@ -174,6 +174,20 @@ main h2:first-of-type {
   gap: 40px;
 }
 
+/* =====================================================
+   Two-column page layout (sidebar + content)
+   ===================================================== */
+
+.page-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 40px;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
 /* ---------- Sidebar ---------- */
 .sidebar {
   width: 200px;
@@ -183,7 +197,7 @@ main h2:first-of-type {
 
 .profile-pic {
   width: 180px;
-  height: 220px;        /* oval shape */
+  height: 220px;
   object-fit: cover;
   border-radius: 50%;
   margin-bottom: 15px;
@@ -211,8 +225,8 @@ main h2:first-of-type {
   text-align: left;
 }
 
-/* ---------- Mobile responsiveness ---------- */
-@media (max-width: 768px) {
+/* ---------- Mobile: stack vertically ---------- */
+@media (max-width: 900px) {
   .page-layout {
     flex-direction: column;
     align-items: center;
@@ -227,5 +241,3 @@ main h2:first-of-type {
     width: 100%;
   }
 }
-
-
