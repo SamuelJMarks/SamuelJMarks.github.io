@@ -23,6 +23,6 @@ title: Research
 ## Working Papers
 
 - Fuller House: An Exploration of Cube Root Rule Simulations on the Expansion of the House of Representatives
--   Rep Files - assets/Rep Files
+-   [Rep Files](https://github.com/SamuelJMarks/SamuelJMarks.github.io/tree/main/assets/Rep%20Files)
 
 
