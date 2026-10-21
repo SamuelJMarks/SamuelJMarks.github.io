@@ -22,6 +22,7 @@ title: Research
 
 ## Working Papers
 
-- To Come
+- Fuller House: An Exploration of Cube Root Rule Simulations on the Expansion of the House of Representatives
+-   Rep Files - assets/Rep Files
 
 
