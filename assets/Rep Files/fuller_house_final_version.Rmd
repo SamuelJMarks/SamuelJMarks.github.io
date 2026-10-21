@@ -1,0 +1,1292 @@
+# 1 Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  cache   = TRUE,
+  fig.width  = 10,
+  fig.height = 6
+)
+```
+
+
+# 2 Packages and Parameters
+
+```{r packages, cache=FALSE}
+pkgs <- c("redist","redistmetrics","tidyverse","tidycensus",
+          "tigris","sf","readxl","scales","knitr","kableExtra",
+          "patchwork","gridExtra","magick","webshot2")
+for (p in pkgs) if (!requireNamespace(p, quietly = TRUE))
+  install.packages(p, repos = "https://cloud.r-project.org")
+
+library(redist); library(redistmetrics); library(tidyverse)
+library(tidycensus); library(tigris); library(sf)
+library(readxl); library(scales); library(knitr)
+library(kableExtra); library(patchwork); library(gridExtra)
+library(magick); library(webshot2)
+
+options(tigris_use_cache = TRUE)
+
+NSIMS             <- 5000L
+CENSUS_KEY        <- NULL        
+SKIP_LARGE_STATES <- FALSE
+CHECKPOINT_DIR    <- "sim_checkpoints"
+OUTPUT_DIR        <- "output_figures"
+
+if (!dir.exists(CHECKPOINT_DIR)) dir.create(CHECKPOINT_DIR)
+if (!dir.exists(OUTPUT_DIR))     dir.create(OUTPUT_DIR)
+
+
+USE_CENSUS_API <- file.exists("tract_pops.rds") && file.exists("minority_vap.rds")
+
+if (USE_CENSUS_API) {
+  cat("Census cache files found — will use exact tract populations.\n")
+} else {
+  cat("No Census cache — using vote-count population approximation.\n")
+  cat("Run download_census_data.R locally and copy .rds files to this folder.\n")
+}
+
+save_fig <- function(plot_obj, filename, width = 10, height = 6, dpi = 300) {
+  path <- file.path(OUTPUT_DIR, paste0(filename, ".png"))
+  ggsave(path, plot = plot_obj, width = width, height = height,
+         dpi = dpi, bg = "white")
+  cat(sprintf("  Saved: %s\n", path))
+  plot_obj
+}
+
+save_table <- function(df, filename, title = "", col_names = NULL) {
+  df_chr <- df %>% mutate(across(everything(), as.character))
+  if (!is.null(col_names)) names(df_chr) <- col_names
+
+  n_rows <- nrow(df_chr)
+  n_cols <- ncol(df_chr)
+
+  col_char_widths <- purrr::map_dbl(seq_len(n_cols), function(i) {
+    max(nchar(df_chr[[i]]), nchar(names(df_chr)[i]))
+  })
+  est_width_in <- sum(col_char_widths * 0.11) + n_cols * 0.3
+
+  tbl_grob <- tableGrob(df_chr, rows = NULL,
+                         theme = ttheme_minimal(base_size = 9))
+
+  path <- file.path(OUTPUT_DIR, paste0(filename, ".png"))
+
+  ggsave(path, plot = tbl_grob,
+         width  = max(8, est_width_in * 1.15),
+         height = max(3, n_rows * 0.35 + 1),
+         dpi = 300, bg = "white")
+
+  img <- magick::image_read(path) |>
+    magick::image_trim() |>
+    magick::image_border("white", "30x30")
+
+  if (nzchar(title)) {
+    info <- magick::image_info(img)
+    img <- magick::image_extent(
+      img,
+      geometry = magick::geometry_size_pixels(width = info$width, height = info$height + 100),
+      gravity  = "south",
+      color    = "white"
+    )
+    img <- magick::image_annotate(
+      img, title, gravity = "north", size = 46, weight = 700,
+      location = "+0+20", color = "black"
+    )
+  }
+
+  magick::image_write(img, path)
+  cat(sprintf("  Saved: %s\n", path))
+  invisible(df)
+}
+
+save_kable_png <- function(kable_obj, filename, zoom = 3, border = NULL) {
+  path <- file.path(OUTPUT_DIR, paste0(filename, ".png"))
+  kableExtra::save_kable(kable_obj, file = path, zoom = zoom)
+  if (!is.null(border)) {
+    magick::image_read(path) |>
+      magick::image_border("white", border) |>
+      magick::image_write(path)
+  }
+  cat(sprintf("  Saved: %s\n", path))
+  invisible(kable_obj)
+}
+
+
+tbl_title <- function(title) {
+  sprintf("<div style='width:100%%; text-align:center; font-size:20px; font-weight:700;'>%s</div>", title)
+}
+
+
+set.seed(1986)
+
+theme_set(
+  theme_minimal(base_size = 13) +
+    theme(
+      plot.title    = element_text(hjust = 0.5, face = "bold"),
+      plot.subtitle = element_text(hjust = 0.5),
+      plot.caption  = element_text(hjust = 1),
+      legend.position = "bottom"
+    )
+)
+```
+
+
+# 3 Population Data
+
+#3.1 From Census Apportionment Excel File
+
+```{r population}
+pop_raw <- read_excel(
+  "apportionment-2020-table02.xlsx",
+  sheet     = "Table 2",
+  col_names = FALSE,
+  skip      = 3
+)
+
+fips_lookup <- tibble(
+  state_name = c(
+    "Alabama","Alaska","Arizona","Arkansas","California","Colorado",
+    "Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho",
+    "Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana",
+    "Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi",
+    "Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey",
+    "New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma",
+    "Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota",
+    "Tennessee","Texas","Utah","Vermont","Virginia","Washington",
+    "West Virginia","Wisconsin","Wyoming"
+  ),
+  fips = c(
+    "01","02","04","05","06","08",
+    "09","10","12","13","15","16",
+    "17","18","19","20","21","22",
+    "23","24","25","26","27","28",
+    "29","30","31","32","33","34",
+    "35","36","37","38","39","40",
+    "41","42","44","45","46",
+    "47","48","49","50","51","53",
+    "54","55","56"
+  )
+)
+
+state_pops <- pop_raw %>%
+  select(state_name = 1, pop_2020 = 2) %>%
+  mutate(pop_2020 = as.numeric(pop_2020)) %>%
+  filter(
+    !is.na(pop_2020),
+    !str_detect(state_name, regex("total|puerto rico|district of columbia",
+                                   ignore_case = TRUE))
+  ) %>%
+  mutate(state_name = str_trim(state_name)) %>%
+  left_join(fips_lookup, by = "state_name")
+
+us_pop <- sum(state_pops$pop_2020)
+cat("States:", nrow(state_pops), "\n")
+cat("US population:", comma(us_pop), "\n")
+cat("Cube root seats:", round(us_pop^(1/3)), "\n")
+```
+# 3.2 Census Tract Populations and Minority VAP
+```{r census-api}
+
+if (USE_CENSUS_API) {
+  cat("Loading tract_pops.rds...\n")
+  tract_pops <- readRDS("tract_pops.rds")
+  cat(sprintf("  tract_pops: %d tracts loaded\n", nrow(tract_pops)))
+
+  cat("Loading minority_vap.rds...\n")
+  minority_vap <- readRDS("minority_vap.rds")
+  cat(sprintf("  minority_vap: %d tracts loaded\n", nrow(minority_vap)))
+
+  tract_pops <- tract_pops %>%
+    left_join(sf::st_drop_geometry(minority_vap) %>% select(GEOID, minority_vap_frac),
+              by = "GEOID")
+
+  cat(sprintf("  Combined: %d tracts with pop + minority VAP\n", nrow(tract_pops)))
+} else {
+  cat("Census .rds files not found — using vote-count approximation.\n")
+  tract_pops   <- NULL
+  minority_vap <- NULL
+}
+```
+
+# 4 Apportionment
+
+```{r apportionment}
+
+huntington_hill <- function(pops, total_seats) {
+  seats <- rep(1L, length(pops))
+  for (i in seq_len(total_seats - length(pops))) {
+    priority <- pops / sqrt(seats * (seats + 1L))
+    seats[which.max(priority)] <- seats[which.max(priority)] + 1L
+  }
+  seats
+}
+
+
+state_pops <- state_pops %>%
+  mutate(
+    seats_435       = huntington_hill(pop_2020, 435L),
+    seats_692       = huntington_hill(pop_2020, 692L),
+    seats_gained    = seats_692 - seats_435,
+    pop_per_rep_435 = round(pop_2020 / seats_435),
+    pop_per_rep_692 = round(pop_2020 / seats_692)
+  )
+
+apportionment_kable <- state_pops %>%
+  select(state_name, pop_2020, seats_435, seats_692,
+         seats_gained, pop_per_rep_435, pop_per_rep_692) %>%
+  mutate(across(c(pop_2020, pop_per_rep_435, pop_per_rep_692), comma)) %>%
+  kable(col.names = c("State","Population","Seats (435)","Seats (692)",
+                      "Gained","Pop/Rep (435)","Pop/Rep (692)"),
+        align   = c("l","l","r","r","r","r","r"),
+        caption = tbl_title("Huntington-Hill Apportionment"),
+        escape  = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                position = "center", full_width = FALSE, font_size = 11) %>%
+  row_spec(0, bold = TRUE)
+
+apportionment_kable
+
+save_kable_png(apportionment_kable, "apportionment")
+```
+
+# 4.1 Interstate Population Parity
+
+
+```{r parity-plot}
+ideal_435 <- us_pop / 435
+ideal_692 <- us_pop / 692
+
+fig1 <- state_pops %>%
+  select(state_name, pop_per_rep_435, pop_per_rep_692) %>%
+  pivot_longer(c(pop_per_rep_435, pop_per_rep_692),
+               names_to = "system", values_to = "ppr") %>%
+  mutate(system = recode(system,
+    pop_per_rep_435 = "Actual 435-Seat",
+    pop_per_rep_692 = "Cube Root Rule (692)")) %>%
+  ggplot(aes(x = ppr, fill = system, colour = system)) +
+  geom_density(alpha = 0.35, linewidth = 0.8) +
+  geom_vline(xintercept = ideal_435, linetype="dashed",
+             colour="#E69F00", linewidth=0.7) +
+  geom_vline(xintercept = ideal_692, linetype="dashed",
+             colour="#009E73", linewidth=0.7) +
+  scale_x_continuous(labels = comma) +
+  scale_fill_manual(values=c("Actual 435-Seat"="#E69F00",
+                              "Cube Root Rule (692)"="#009E73")) +
+  scale_colour_manual(values=c("Actual 435-Seat"="#E69F00",
+                                "Cube Root Rule (692)"="#009E73")) +
+  labs(title="Interstate Population per Representative",
+       subtitle="Dashed Lines = National Ideal (Narrower = More Equal)",
+       x="Population per Representative", y="Density",
+       fill=NULL, colour=NULL)
+
+save_fig(fig1, "interstate_parity")
+
+tbl2 <- tibble(
+  System = c("Actual 435-Seat","Cube Root Rule (692)"),
+  Mean   = c(mean(state_pops$pop_per_rep_435), mean(state_pops$pop_per_rep_692)),
+  SD     = c(sd(state_pops$pop_per_rep_435),   sd(state_pops$pop_per_rep_692)),
+  Min    = c(min(state_pops$pop_per_rep_435),  min(state_pops$pop_per_rep_692)),
+  Max    = c(max(state_pops$pop_per_rep_435),  max(state_pops$pop_per_rep_692)),
+  `Max/Min` = c(
+    max(state_pops$pop_per_rep_435)/min(state_pops$pop_per_rep_435),
+    max(state_pops$pop_per_rep_692)/min(state_pops$pop_per_rep_692))
+) %>%
+ 
+  mutate(
+    across(c(Mean, SD, Min, Max), ~round(.x, 1)),
+    `Max/Min` = round(`Max/Min`, 2)
+  )
+
+tbl2_kable <- tbl2 %>%
+  kable(format.args = list(big.mark = ","),
+        caption = tbl_title("Population Parity Statistics"),
+        escape  = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped","hover"),
+                full_width = FALSE, position = "center") %>%
+  row_spec(0, bold = TRUE)
+
+tbl2_kable
+
+save_kable_png(tbl2_kable, "parity_stats", border = "40x40")
+```
+
+
+
+# 5 Actual 2024 Election Results (435-Seat Baseline)
+
+```{r actual-results}
+no_total_states <- c("ALASKA","ARIZONA","ARKANSAS","HAWAII","IOWA",
+                     "MARYLAND","NORTH CAROLINA","SOUTH CAROLINA","WEST VIRGINIA")
+
+raw <- read_csv(
+  "HOUSE_precinct_general.csv",
+  col_types = cols(county_fips = col_character(),
+                   district    = col_character(),
+                   votes       = col_double(),
+                   .default    = col_character()),
+  show_col_types = FALSE
+) %>%
+  mutate(
+    special = as.logical(special),
+    writein = as.logical(writein),
+    votes   = as.numeric(votes)
+  ) %>%
+  filter(
+    !special | is.na(special),
+    !writein | is.na(writein),
+    office == "US HOUSE"
+  )
+
+actual_district <- raw %>%
+  filter(party_simplified %in% c("DEMOCRAT","REPUBLICAN")) %>%
+  mutate(keep = if_else(state %in% no_total_states, TRUE, mode == "TOTAL")) %>%
+  filter(keep) %>%
+  group_by(state, district, party_simplified) %>%
+  summarise(votes = sum(votes, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from  = party_simplified,
+              values_from = votes,
+              values_fill = 0) %>%
+  rename(dem_votes = DEMOCRAT, rep_votes = REPUBLICAN) %>%
+  mutate(
+    total_votes = dem_votes + rep_votes,
+    dem_frac    = if_else(total_votes > 0, dem_votes / total_votes, NA_real_)
+  ) %>%
+  filter(
+    !district %in% c("STATEWIDE","AT-LARGE",""),
+    !is.na(suppressWarnings(as.numeric(district)))
+  )
+
+actual_state <- actual_district %>%
+  group_by(state) %>%
+  summarise(
+    n_districts   = n(),
+    dem_seats     = sum(dem_frac > 0.50, na.rm = TRUE),
+    rep_seats     = sum(dem_frac < 0.50, na.rm = TRUE),
+    mean_dem      = mean(dem_frac, na.rm = TRUE),
+    median_dem    = median(dem_frac, na.rm = TRUE),
+    bias          = mean(dem_frac, na.rm=TRUE) - median(dem_frac, na.rm=TRUE),
+    pct_comp      = mean(dem_frac >= 0.45 & dem_frac <= 0.55, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    bias_dir = case_when(
+      bias >  0.01 ~ "Pro-Republican",
+      bias < -0.01 ~ "Pro-Democratic",
+      TRUE         ~ "Neutral"
+    )
+  )
+
+cat("Districts:", nrow(actual_district), "\n")
+cat("States:", n_distinct(actual_district$state), "\n")
+
+actual_state %>%
+  mutate(
+    bias     = round(bias, 4),
+    pct_comp = percent(pct_comp, accuracy = 0.1)
+  ) %>%
+  kable(
+    col.names = c("State","Districts","Dem Seats","Rep Seats",
+                  "Mean Dem","Median Dem","Bias","% Comp","Direction"),
+    caption   = "Actual 2024 Results by State (435-Seat System)",
+    digits    = 3
+  ) %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                position = "center", full_width = FALSE, font_size = 10)
+```
+
+# 6 VRA Majority-Minority Constraints
+
+```{r vra-constraints}
+vra_raw <- tribble(
+  ~state_name,      ~mm_min_435, ~legal_basis,
+  "Alabama",        1,  "Allen v. Milligan (2023)",
+  "California",     11, "California VRA (CVRA)",
+  "Florida",        4,  "Fair Districts Amendment + Gingles",
+  "Georgia",        5,  "Gingles (GA-02,04,05,13,14)",
+  "Illinois",       4,  "Gingles (IL-01,02,07 Black; IL-04 Hispanic)",
+  "Louisiana",      2,  "Robinson v. Ardoin (2023)",
+  "Maryland",       2,  "Gingles (MD-04,07)",
+  "Massachusetts",  1,  "Gingles (MA-07)",
+  "Michigan",       2,  "Gingles (MI-12,13)",
+  "Mississippi",    1,  "Gingles (MS-02)",
+  "New Jersey",     1,  "Gingles (NJ-10)",
+  "New York",       6,  "Gingles (NY-05,06,07,08,15 + Hispanic)",
+  "North Carolina", 2,  "Gingles + Covington v. NC",
+  "Ohio",           2,  "Gingles (OH-03,11)",
+  "Pennsylvania",   1,  "Gingles (PA-02)",
+  "South Carolina", 1,  "Alexander v. SC NAACP (2023)",
+  "Tennessee",      1,  "Gingles (TN-09)",
+  "Texas",          7,  "Gingles (TX-09,18,30 Black; TX-15,16,20,28 Hispanic)",
+  "Virginia",       2,  "Gingles + LWV v. VA (VA-03,04)"
+)
+
+vra_constraints <- vra_raw %>%
+  left_join(state_pops %>% select(state_name, seats_435, seats_692),
+            by = "state_name") %>%
+  mutate(mm_min_692 = ceiling(mm_min_435 * seats_692 / seats_435))
+
+vra_constraints %>%
+  select(state_name, mm_min_435, mm_min_692, legal_basis) %>%
+  kable(col.names = c("State","MM Min (435)","MM Min (692)","Legal Basis"),
+        caption   = "Majority-Minority District Floors") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                position = "center", full_width = FALSE, font_size = 10)
+```
+
+
+
+# 7 SMC Simulations
+
+# 7.1 Helper Functions
+
+```{r helper-functions}
+
+get_county_votes <- function(state_upper) {
+  mode_filter <- if (state_upper %in% no_total_states) {
+    unique(raw$mode)   
+  } else {
+    "TOTAL"            
+  }
+
+  raw %>%
+    filter(
+      state             == state_upper,
+      party_simplified  %in% c("DEMOCRAT","REPUBLICAN"),
+      mode              %in% mode_filter
+    ) %>%
+    mutate(county_fips = str_pad(county_fips, 5, "left", "0")) %>%
+    group_by(county_fips, party_simplified) %>%
+    summarise(votes = sum(votes, na.rm = TRUE), .groups = "drop") %>%
+    pivot_wider(names_from  = party_simplified,
+                values_from = votes,
+                values_fill = 0) %>%
+    rename(dem_votes = DEMOCRAT, rep_votes = REPUBLICAN) %>%
+    mutate(
+      total_votes = dem_votes + rep_votes,
+      dem_frac    = if_else(total_votes > 0, dem_votes / total_votes, NA_real_)
+    )
+}
+
+
+get_geometry <- function(fips_code, min_units, state_label) {
+
+  levels <- if (USE_CENSUS_API) {
+    c("vtd", "tract", "county")
+  } else {
+    c("tract", "county")
+  }
+
+  for (geo_level in levels) {
+
+    result <- tryCatch({
+      g <- switch(geo_level,
+        vtd   = tigris::voting_districts(state = fips_code, year = 2020),
+        tract = tigris::tracts(state = fips_code, year = 2020, cb = TRUE),
+        county = tigris::counties(state = fips_code, year = 2020, cb = TRUE)
+      )
+      if (is.null(g) || nrow(g) < max(min_units, 2L)) NULL else g
+    }, error = function(e) NULL)
+
+    if (!is.null(result)) {
+      cat(sprintf("     geometry: %s (%d units)\n", geo_level, nrow(result)))
+      flush.console()
+      return(result %>% st_transform(crs = 3857))
+    }
+
+    cat(sprintf("     %s unavailable — trying next\n", geo_level))
+    flush.console()
+  }
+
+  stop(sprintf("All geometry options failed for %s", state_label))
+}
+
+
+patch_adjacency <- function(shp) {
+
+  touches <- sf::st_touches(shp)
+  adj <- lapply(touches, function(x) as.integer(x) - 1L)  
+
+  n    <- nrow(shp)
+  comp <- integer(n)
+  cid  <- 0L
+
+  for (start in seq_len(n)) {
+    if (comp[start] != 0L) next
+    cid   <- cid + 1L
+    queue <- start
+    while (length(queue) > 0) {
+      cur        <- queue[1]; queue <- queue[-1]
+      if (comp[cur] != 0L) next
+      comp[cur]  <- cid
+      nbrs       <- adj[[cur]] + 1L
+      unvisited  <- nbrs[comp[nbrs] == 0L]
+      queue      <- c(queue, unvisited)
+    }
+  }
+
+  n_comp <- max(comp)
+
+  if (n_comp > 1L) {
+    cat(sprintf("     %d components found — bridging %d island unit(s)\n",
+                n_comp, sum(comp != which.max(tabulate(comp)))))
+    flush.console()
+
+    main_id    <- which.max(tabulate(comp))
+    main_idx   <- which(comp == main_id)
+    island_idx <- which(comp != main_id)
+    cents      <- sf::st_centroid(sf::st_geometry(shp))
+
+    for (iso in island_idx) {
+      dists   <- as.numeric(sf::st_distance(cents[iso], cents[main_idx]))
+      nearest <- main_idx[which.min(dists)]
+      iso0    <- iso - 1L
+      near0   <- nearest - 1L
+      if (!near0 %in% adj[[iso]])     adj[[iso]]     <- c(adj[[iso]],     near0)
+      if (!iso0  %in% adj[[nearest]]) adj[[nearest]] <- c(adj[[nearest]], iso0)
+    }
+  }
+
+  adj
+}
+
+
+build_state_map <- function(state_name_title, fips_code, ndists, mm_min = 0L) {
+
+  state_upper <- str_to_upper(state_name_title)
+
+  # 1. County-level election data
+  elect <- get_county_votes(state_upper)
+  state_mean_dem <- mean(elect$dem_frac, na.rm = TRUE)
+  cat(sprintf("     counties in election data: %d\n", nrow(elect)))
+  flush.console()
+
+  # 2. Geometry
+  geo <- get_geometry(fips_code, min_units = ndists + 1L,
+                      state_label = state_name_title)
+
+  # 3. Standardise GEOID column
+  geoid_col <- if ("GEOID20" %in% names(geo)) "GEOID20" else "GEOID"
+  geo <- geo %>%
+    mutate(
+      GEOID_unit      = .data[[geoid_col]],
+      county_fips_geo = str_sub(.data[[geoid_col]], 1, 5)
+    ) %>%
+    select(GEOID_unit, county_fips_geo, geometry)
+
+  # 4. Join county vote data to geometry units
+  joined <- geo %>%
+    left_join(elect, by = c("county_fips_geo" = "county_fips")) %>%
+    mutate(
+      dem_frac    = coalesce(dem_frac,    state_mean_dem),
+      dem_votes   = coalesce(dem_votes,   0),
+      rep_votes   = coalesce(rep_votes,   0),
+      total_votes = coalesce(total_votes, 0)
+    ) %>%
+    filter(!is.na(geometry)) %>%
+    group_by(county_fips_geo) %>%
+    mutate(
+      n_in_county = n(),
+      dem_votes   = dem_votes   / n_in_county,
+      rep_votes   = rep_votes   / n_in_county,
+      total_votes = total_votes / n_in_county
+    ) %>%
+    ungroup()
+
+  # 5. Assign population and minority VAP
+  if (USE_CENSUS_API && !is.null(tract_pops)) {
+
+    state_tracts <- tract_pops %>%
+      filter(str_sub(GEOID, 1, 2) == fips_code)
+
+    joined <- joined %>%
+      left_join(
+        sf::st_drop_geometry(state_tracts) %>%
+          select(GEOID, pop_tract, minority_vap_frac),
+        by = c("GEOID_unit" = "GEOID")
+      ) %>%
+      mutate(
+        pop           = as.integer(coalesce(pop_tract, 0L)),
+        minority_frac = coalesce(minority_vap_frac, state_mean_dem)
+      )
+
+  } else {
+    joined <- joined %>%
+      mutate(
+        pop           = if_else(total_votes > 0,
+                                as.integer(round(total_votes * 2.1)), 0L),
+        minority_frac = dem_frac  
+      )
+  }
+
+  joined <- joined %>% mutate(pop = pmax(as.integer(pop), 1L))
+
+  cat(sprintf("     units: %d | pop range: %d-%d\n",
+              nrow(joined), min(joined$pop), max(joined$pop)))
+  flush.console()
+
+  # 6. Build patched adjacency
+  adj <- patch_adjacency(joined)
+
+  # 7. Population tolerance
+  pop_tolerance <- if (USE_CENSUS_API) 0.01 else 0.20
+
+  rmap <- redist_map(
+    joined,
+    ndists    = ndists,
+    pop_tol   = pop_tolerance,
+    total_pop = pop,
+    adj       = adj
+  )
+
+  cat(sprintf("     redist_map: %d units, %d districts, pop_tol=%.0f%%\n",
+              nrow(rmap), ndists, pop_tolerance * 100))
+  flush.console()
+  rmap
+}
+
+run_smc <- function(map_obj, nsims) {
+  redist_smc(
+    map_obj,
+    nsims       = nsims,
+    compactness = 1,
+    runs        = 2L, 
+    verbose     = TRUE
+  )
+}
+
+
+compute_plan_metrics <- function(plans_obj, map_obj) {
+  plans_obj %>%
+    mutate(
+      dem_share   = group_frac(map_obj, dem_votes, total_votes),
+      max_pop_dev = plan_parity(map_obj)
+    ) %>%
+    group_by(draw) %>%
+    summarise(
+      n_districts      = n(),
+      mean_dem         = mean(dem_share, na.rm = TRUE),
+      median_dem       = median(dem_share, na.rm = TRUE),
+      mean_median_diff = mean_dem - median_dem,
+      pct_competitive  = mean(dem_share >= 0.45 & dem_share <= 0.55,
+                               na.rm = TRUE),
+      dem_seats        = sum(dem_share > 0.50, na.rm = TRUE),
+      rep_seats        = sum(dem_share < 0.50, na.rm = TRUE),
+      max_pop_dev      = first(max_pop_dev),
+      .groups          = "drop"
+    ) %>%
+    mutate(
+      bias_dir = case_when(
+        mean_median_diff >  0.01 ~ "Pro-Republican",
+        mean_median_diff < -0.01 ~ "Pro-Democratic",
+        TRUE                     ~ "Neutral"
+      )
+    )
+}
+```
+
+# 7.2 Simulation Loop
+
+```{r sim-setup, cache=FALSE}
+LARGE_STATES    <- c("California","Texas","New York","Florida")
+
+sim_states <- state_pops %>%
+  filter(seats_692 > 1) %>%
+  { if (SKIP_LARGE_STATES) filter(., !state_name %in% LARGE_STATES) else . } %>%
+  left_join(vra_constraints %>% select(state_name, mm_min_692),
+            by = "state_name") %>%
+  mutate(
+    mm_min_692  = replace_na(mm_min_692, 0L),
+    state_upper = str_to_upper(state_name)
+  ) %>%
+  arrange(seats_692)  
+
+results_list <- vector("list", nrow(sim_states))
+names(results_list) <- sim_states$state_name
+
+ckpts <- list.files(CHECKPOINT_DIR, pattern = "\\.rds$", full.names = TRUE)
+for (f in ckpts) {
+  s <- readRDS(f)
+  if (s$state_name %in% names(results_list)) {
+    results_list[[s$state_name]] <- s$metrics
+    cat("Checkpoint loaded:", s$state_name, "\n")
+  }
+}
+
+states_to_run <- sim_states[sapply(results_list, is.null), ]
+cat("\nStates to simulate:", nrow(states_to_run), "\n")
+if (SKIP_LARGE_STATES)
+  cat("Skipping (large):", paste(LARGE_STATES, collapse=", "), "\n")
+```
+
+```{r simulation-loop, cache=FALSE}
+
+n_total <- nrow(states_to_run)
+t_start <- proc.time()[["elapsed"]]
+
+for (i in seq_len(n_total)) {
+
+  nm    <- states_to_run$state_name[i]
+  fips  <- states_to_run$fips[i]
+  seats <- states_to_run$seats_692[i]
+  mm    <- states_to_run$mm_min_692[i]
+
+  elapsed <- proc.time()[["elapsed"]] - t_start
+  eta     <- if (i > 1) elapsed / (i - 1) * (n_total - i + 1) else NA_real_
+
+  cat(sprintf(
+    "\n══ [%d/%d] %s | seats: %d | MM floor: %d | elapsed: %.0fmin%s ══\n",
+    i, n_total, nm, seats, mm, elapsed/60,
+    if (!is.na(eta)) sprintf(" | ETA: ~%.0fmin", eta/60) else ""
+  ))
+  flush.console()
+
+  tryCatch({
+
+    t0 <- proc.time()[["elapsed"]]
+
+    cat("  [1/3] Building map...\n"); flush.console()
+    map_i <- build_state_map(nm, fips, seats, mm_min = mm)
+
+    cat("  [2/3] Running SMC (verbose output follows)...\n"); flush.console()
+    plans_i <- run_smc(map_i, NSIMS)
+
+    cat("  Convergence summary:\n"); flush.console()
+    print(summary(plans_i))
+
+    cat("  [3/3] Computing metrics...\n"); flush.console()
+    metrics_i <- compute_plan_metrics(plans_i, map_i) %>%
+      mutate(state = nm, ndists = seats)
+
+    cat(sprintf("  ✓ %s complete in %.0fs | %d plans\n",
+                nm, proc.time()[["elapsed"]] - t0, nrow(metrics_i)))
+    flush.console()
+
+    results_list[[nm]] <- metrics_i
+
+    saveRDS(list(state_name = nm, metrics = metrics_i),
+            file.path(CHECKPOINT_DIR,
+                      paste0(gsub(" ","_", nm), ".rds")))
+    cat(sprintf("  Checkpoint saved: %s\n", nm)); flush.console()
+
+  }, error = function(e) {
+    cat(sprintf("  ✗ FAILED %s: %s\n", nm, e$message)); flush.console()
+  })
+}
+
+results_692 <- bind_rows(results_list)
+
+cat(sprintf("\n══ Done. %d states simulated. Total: %.0f min ══\n",
+            n_distinct(results_692$state),
+            (proc.time()[["elapsed"]] - t_start) / 60))
+cat(sprintf("Total simulated plans: %d\n", nrow(results_692)))
+```
+# 8 Results
+
+```{r load-results, cache=FALSE}
+
+ckpt_files <- list.files(CHECKPOINT_DIR, pattern = "\\.rds$", full.names = TRUE)
+
+if (length(ckpt_files) == 0) {
+  stop(paste0(
+    "No checkpoint files found in '", CHECKPOINT_DIR, "/'.\n",
+    "Run the simulation loop in Section 7.2 first, then re-knit."
+  ))
+}
+
+results_692 <- map_dfr(ckpt_files, function(f) {
+  s <- readRDS(f)
+  s$metrics
+}) %>%
+  mutate(
+    bias_dir = factor(case_when(
+      mean_median_diff >  0.01 ~ "Pro-Republican",
+      mean_median_diff < -0.01 ~ "Pro-Democratic",
+      TRUE                     ~ "Neutral"
+    ), levels = c("Pro-Republican","Neutral","Pro-Democratic"))
+  )
+
+cat(sprintf("Results loaded: %d states | %d total simulated plans\n",
+            n_distinct(results_692$state), nrow(results_692)))
+cat("States:", paste(sort(unique(results_692$state)), collapse=", "), "\n")
+
+
+if (!exists("actual_state")) {
+  no_total_states <- c("ALASKA","ARIZONA","ARKANSAS","HAWAII","IOWA",
+                       "MARYLAND","NORTH CAROLINA","SOUTH CAROLINA",
+                       "WEST VIRGINIA")
+  raw_tmp <- read_csv(
+    "HOUSE_precinct_general.csv",
+    col_types = cols(county_fips = col_character(),
+                     district    = col_character(),
+                     votes       = col_double(),
+                     .default    = col_character()),
+    show_col_types = FALSE
+  ) %>%
+    mutate(special = as.logical(special),
+           writein = as.logical(writein),
+           votes   = as.numeric(votes)) %>%
+    filter(!special | is.na(special),
+           !writein | is.na(writein),
+           office == "US HOUSE")
+
+  actual_state <- raw_tmp %>%
+    filter(party_simplified %in% c("DEMOCRAT","REPUBLICAN")) %>%
+    mutate(keep = if_else(state %in% no_total_states, TRUE, mode == "TOTAL")) %>%
+    filter(keep) %>%
+    group_by(state, district, party_simplified) %>%
+    summarise(votes = sum(votes, na.rm = TRUE), .groups = "drop") %>%
+    pivot_wider(names_from = party_simplified, values_from = votes,
+                values_fill = 0) %>%
+    rename(dem_votes = DEMOCRAT, rep_votes = REPUBLICAN) %>%
+    mutate(total_votes = dem_votes + rep_votes,
+           dem_frac = if_else(total_votes > 0, dem_votes/total_votes, NA_real_)) %>%
+    filter(!district %in% c("STATEWIDE","AT-LARGE",""),
+           !is.na(suppressWarnings(as.numeric(district)))) %>%
+    group_by(state) %>%
+    summarise(
+      n_districts = n(),
+      dem_seats   = sum(dem_frac > 0.50, na.rm = TRUE),
+      rep_seats   = sum(dem_frac < 0.50, na.rm = TRUE),
+      mean_dem    = mean(dem_frac, na.rm = TRUE),
+      median_dem  = median(dem_frac, na.rm = TRUE),
+      bias        = mean(dem_frac, na.rm=TRUE) - median(dem_frac, na.rm=TRUE),
+      pct_comp    = mean(dem_frac >= 0.45 & dem_frac <= 0.55, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(bias_dir = case_when(
+      bias >  0.01 ~ "Pro-Republican",
+      bias < -0.01 ~ "Pro-Democratic",
+      TRUE         ~ "Neutral"))
+
+  rm(raw_tmp)
+  cat("actual_state rebuilt from CSV.\n")
+}
+
+if (!exists("state_pops") || !"pop_per_rep_435" %in% names(state_pops)) {
+  stop("Run Section 3 and 4 first (population and apportionment chunks), then re-run Section 8.")
+}
+
+actual_bias <- actual_state %>%
+  filter(state %in% str_to_upper(results_692$state)) %>%
+  summarise(mean_bias = mean(bias, na.rm = TRUE))
+
+sim_avgs <- results_692 %>%
+  group_by(state, ndists) %>%
+  summarise(
+    avg_bias      = mean(mean_median_diff, na.rm = TRUE),
+    sd_bias       = sd(mean_median_diff,   na.rm = TRUE),
+    bias_lo       = quantile(mean_median_diff, 0.025, na.rm = TRUE),
+    bias_hi       = quantile(mean_median_diff, 0.975, na.rm = TRUE),
+    avg_comp      = mean(pct_competitive,   na.rm = TRUE),
+    comp_lo       = quantile(pct_competitive, 0.025, na.rm = TRUE),
+    comp_hi       = quantile(pct_competitive, 0.975, na.rm = TRUE),
+    avg_dem_seats = mean(dem_seats,          na.rm = TRUE),
+    avg_rep_seats = mean(rep_seats,          na.rm = TRUE),
+    .groups = "drop"
+  )
+
+comparison <- sim_avgs %>%
+  mutate(state_upper = str_to_upper(state)) %>%
+  left_join(actual_state, by = c("state_upper" = "state")) %>%
+  mutate(
+    bias_change = avg_bias - bias,
+    comp_change = avg_comp - pct_comp,
+    seat_change = avg_dem_seats - dem_seats
+  )
+
+never_simulated <- state_pops %>%
+  filter(seats_692 == 1) %>%                       
+  mutate(state_upper = str_to_upper(state_name),
+         state = state_name, ndists = seats_692) %>%
+  left_join(actual_state, by = c("state_upper" = "state")) %>%
+  select(state, ndists, any_of(names(comparison)))  
+
+comparison <- bind_rows(comparison, never_simulated)
+
+MIN_DISTS_FOR_SIG <- 3L
+
+sig_flags <- results_692 %>%
+  group_by(state) %>%
+  group_modify(~ {
+    st_upper <- str_to_upper(.y$state)
+    act <- actual_state %>% filter(state == st_upper)
+    n_dists <- unique(.x$ndists)
+
+    if (nrow(act) == 0 || n_dists < MIN_DISTS_FOR_SIG) {
+      return(tibble(bias_pctile = NA_real_, comp_pctile = NA_real_))
+    }
+
+    bias_var_ok <- sd(.x$mean_median_diff, na.rm = TRUE) > 0
+    comp_var_ok <- sd(.x$pct_competitive,  na.rm = TRUE) > 0
+
+    tibble(
+      bias_pctile = if (bias_var_ok) mean(.x$mean_median_diff <= act$bias[1], na.rm = TRUE) else NA_real_,
+      comp_pctile = if (comp_var_ok) mean(.x$pct_competitive  <= act$pct_comp[1], na.rm = TRUE) else NA_real_
+    )
+  }) %>%
+  ungroup()
+
+comparison <- comparison %>%
+  left_join(sig_flags, by = "state") %>%
+  mutate(
+    bias_outlier = bias_pctile < 0.025 | bias_pctile > 0.975,
+    comp_outlier = comp_pctile < 0.025 | comp_pctile > 0.975
+  )
+
+swing <- comparison %>%
+  mutate(
+    dem_share_actual = dem_seats / n_districts,
+    dem_share_sim    = avg_dem_seats / ndists,
+    share_change     = dem_share_sim - dem_share_actual
+  ) %>%
+  arrange(desc(abs(seat_change)))
+
+actual_dir <- actual_state %>%
+  filter(state %in% str_to_upper(results_692$state)) %>%
+  count(bias_dir) %>%
+  mutate(pct = n / sum(n), system = "Actual 2024 (435 seats)")
+
+sim_dir <- results_692 %>%
+  count(bias_dir) %>%
+  mutate(pct = n / sum(n), system = "Simulated (692 seats)")
+
+cat("All Section 8 data objects built successfully.\n")
+```
+
+# 8.1 Bias: Actual vs. Simulated
+
+```{r bias-plot}
+fig2 <- ggplot(results_692, aes(x = mean_median_diff)) +
+  geom_density(fill = "#2980B9", colour = "#2980B9", alpha = 0.4,
+               linewidth = 0.8) +
+  geom_vline(xintercept = actual_bias$mean_bias,
+             colour = "#E74C3C", linetype = "dashed", linewidth = 1.0) +
+  geom_vline(xintercept = 0, colour = "black", linetype = "dotted") +
+  annotate("text", x = actual_bias$mean_bias, y = Inf,
+           label = "Actual 2024 Maps",
+           colour = "#E74C3C", hjust = -0.1, vjust = 1.5, size = 3.5) +
+  labs(
+    title    = "Partisan Bias: Actual 435-Seat vs. Simulated 692-Seat",
+    subtitle = "Blue = SMC Simulations (Red Dashed = 2024 Enacted Maps)",
+    x = "Mean-Median Difference (Positive = Pro-Republican)",
+    y = "Density"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+save_fig(fig2, "partisan_bias")
+
+```
+
+# 8.2 State-Level Averages
+
+```{r state-averages}
+
+tbl5_data <- comparison %>%
+  select(state, n_districts, ndists,
+         bias, avg_bias, bias_lo, bias_hi, bias_change, bias_outlier,
+         pct_comp, avg_comp, comp_lo, comp_hi, comp_outlier) %>%
+  mutate(
+    across(c(bias, avg_bias, bias_lo, bias_hi, bias_change), ~round(.x, 4)),
+    bias_ci  = sprintf("[%.4f, %.4f]", bias_lo, bias_hi),
+    across(c(pct_comp, avg_comp), ~percent(.x, accuracy = 0.1)),
+    comp_ci  = sprintf("[%s, %s]",
+                        percent(comp_lo, accuracy = 0.1),
+                        percent(comp_hi, accuracy = 0.1)),
+    bias_out = coalesce(bias_outlier, FALSE),
+    comp_out = coalesce(comp_outlier, FALSE),
+    sig_flag = case_when(
+      is.na(bias_outlier) & is.na(comp_outlier) ~ "\u2014",
+      bias_out & comp_out                       ~ "\u2020\u2021",
+      bias_out                                  ~ "\u2020",
+      comp_out                                  ~ "\u2021",
+      TRUE                                        ~ ""
+    )
+  ) %>%
+  select(state, n_districts, ndists,
+         bias, avg_bias, bias_ci, bias_change,
+         pct_comp, avg_comp, comp_ci, sig_flag)
+
+cat("sig_flag counts:\n")
+print(table(tbl5_data$sig_flag, useNA = "ifany"))
+
+state_averages_kable <- tbl5_data %>%
+  kable(
+    col.names = c("State","Districts (435)","Districts (692)",
+                  "Bias (actual)","Bias (sim avg)","Bias 95% CI","Bias change",
+                  "Comp% (actual)","Comp% (sim avg)","Comp% 95% CI","Flag"),
+    align   = c("l","r","r","r","r","c","r","r","r","c","c"),
+    caption = tbl_title("Actual vs. Average Simulated Outcomes"),
+    escape  = FALSE
+  ) %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                position = "center", full_width = FALSE, font_size = 9) %>%
+  row_spec(0, bold = TRUE) %>%
+  row_spec(which(comparison$bias_outlier | comparison$comp_outlier), bold = TRUE) %>%
+  footnote(
+    general = "States with fewer than 3 simulated districts or zero simulated variance are excluded from significance testing (shown with \u2014).",
+    general_title = "Note: ",
+    footnote_as_chunk = TRUE
+  ) %>%
+  add_footnote(
+    c("\u2020 Bias outside simulated 95% CI", "\u2021 Competitiveness outside simulated 95% CI"),
+    notation = "none"
+  )
+
+state_averages_kable
+
+save_kable_png(state_averages_kable, "state_averages", zoom = 3, border = "20x20")
+```
+
+# 8.3 Competitiveness
+
+```{r competitiveness-plot}
+
+state_order <- comparison %>%
+  arrange(avg_comp) %>%
+  pull(state)
+
+fig3 <- comparison %>%
+  select(state, pct_comp, avg_comp) %>%
+  pivot_longer(c(pct_comp, avg_comp),
+               names_to  = "system",
+               values_to = "pct") %>%
+  mutate(
+    system = recode(system,
+      pct_comp = "Actual 2024 (435 seats)",
+      avg_comp = "Avg Simulated (692 seats)"),
+    state = factor(state, levels = state_order)
+  ) %>%
+  ggplot(aes(x = state, y = pct,
+             fill = system, colour = system)) +
+  geom_col(position = "dodge", width = 0.7) +
+  coord_flip() +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("Actual 2024 (435 seats)"   = "#E74C3C",
+                                "Avg Simulated (692 seats)" = "#2980B9")) +
+  scale_colour_manual(values = c("Actual 2024 (435 seats)"   = "#E74C3C",
+                                  "Avg Simulated (692 seats)" = "#2980B9")) +
+  labs(title    = "Competitive Districts: Actual vs. Simulated",
+       subtitle = "Competitive = Dem Share 45%–55%",
+       x = NULL, y = "Share of Competitive Districts",
+       fill = NULL, colour = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5))
+
+save_fig(fig3, "competitiveness", height = 8)
+```
+
+## 8.4  Partisan Direction
+
+```{r partisan-direction}
+fig4 <- bind_rows(
+  actual_dir %>% rename(bias_direction = bias_dir),
+  sim_dir    %>% rename(bias_direction = bias_dir)
+) %>%
+  mutate(bias_direction = factor(bias_direction,
+    levels = c("Pro-Republican","Neutral","Pro-Democratic"))) %>%
+  ggplot(aes(x = system, y = pct, fill = bias_direction)) +
+  geom_col(position = "stack", width = 0.5) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  scale_fill_manual(values = c("Pro-Republican" = "#E74C3C",
+                                "Neutral"        = "#BDC3C7",
+                                "Pro-Democratic" = "#2980B9")) +
+  labs(title    = "Partisan Bias Direction: Actual vs. Simulated",
+       x = NULL, y = "Share", fill = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5, face = "bold"))
+
+save_fig(fig4, "partisan_direction")
+```
+
+## 8.5  Democratic Seat Swing
+
+```{r seat-swing}
+p1 <- ggplot(swing, aes(x = reorder(state, seat_change), y = seat_change,
+                         fill = seat_change > 0)) +
+  geom_col() + geom_hline(yintercept = 0) + coord_flip() +
+  scale_fill_manual(values = c("TRUE"="#2980B9","FALSE"="#E74C3C"),
+                    guide = "none") +
+  labs(title = "Raw Seat Swing (Dem)", x = NULL, y = "Avg seat change") +
+  theme_minimal(base_size = 10) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+p2 <- ggplot(swing, aes(x = reorder(state, share_change), y = share_change,
+                         fill = share_change > 0)) +
+  geom_col() + geom_hline(yintercept = 0) + coord_flip() +
+  scale_y_continuous(labels = percent_format(accuracy = 0.1)) +
+  scale_fill_manual(values = c("TRUE"="#2980B9","FALSE"="#E74C3C"),
+                    guide = "none") +
+  labs(title = "Seat Share Swing (Dem)", x = NULL, y = "Share change") +
+  theme_minimal(base_size = 10) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+fig5 <- p1 + p2 +
+  plot_annotation(
+    title   = "Dem Seat Swing: Actual 435 → Simulated 692",
+    caption = paste0("Average across n=", NSIMS, " simulations per state."),
+    theme   = theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  )
+
+save_fig(fig5, "seat_swing", height = 8)
+
+tbl6_data <- swing %>%
+  mutate(
+    dem_share_actual = percent(dem_share_actual, accuracy=0.1),
+    dem_share_sim    = percent(dem_share_sim, accuracy=0.1),
+    share_change     = percent(share_change, accuracy=0.1),
+    avg_dem_seats    = round(avg_dem_seats, 1),
+    seat_change      = round(seat_change, 1)
+  ) %>%
+  select(state, dem_seats, avg_dem_seats, seat_change,
+         dem_share_actual, dem_share_sim, share_change)
+
+seat_swing_kable <- tbl6_data %>%
+  kable(col.names = c("State","Actual Dem Seats","Sim Dem Seats","Raw Swing",
+                      "Actual Share","Sim Share","Share Swing"),
+        caption = tbl_title("Democratic Seat Swing"),
+        escape  = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"),
+                position = "center", full_width = FALSE, font_size = 10) %>%
+  row_spec(0, bold = TRUE)
+
+seat_swing_kable
+
+save_kable_png(seat_swing_kable, "seat_swing_table")
+```
+
+# 8.6  Choropleth Maps: Change in Bias and Competitiveness
+
+```{r choropleth-maps, fig.width=11, fig.height=7}
+if (!exists("comparison")) {
+  stop("Run Section 8 (state-level comparison) first — `comparison` not found.")
+}
+
+us_states_sf <- tigris::states(cb = TRUE, resolution = "20m", year = 2020) %>%
+  filter(!STUSPS %in% c("PR", "VI", "GU", "AS", "MP")) %>%
+  shift_geometry()
+
+map_data <- us_states_sf %>%
+  left_join(
+    comparison %>% select(state, bias_change, comp_change),
+    by = c("NAME" = "state")
+  ) %>%
+  mutate(comp_change_pts = comp_change * 100)
+
+unmatched <- map_data %>% st_drop_geometry() %>%
+  filter(is.na(bias_change)) %>% pull(NAME)
+cat("States with no bias_change match:", paste(unmatched, collapse = ", "), "\n")
+
+bias_change_map <- ggplot(map_data) +
+  geom_sf(aes(fill = bias_change), colour = "black", linewidth = 0.15) +
+  scale_fill_gradient2(
+    low = "#2166AC", mid = "white", high = "#B2182B", midpoint = 0,
+    na.value = "grey85",
+    name = "\u0394 Bias\n(sim avg \u2212 actual)"
+  ) +
+  labs(
+    title    = "Change in Partisan Bias: 692-Seat Simulations vs. Actual (435) Plans",
+    subtitle = "Grey = No Actual Plan Comparison Available (Single At-Large District)"
+  ) +
+  theme_void(base_size = 13) +
+  theme(
+    plot.title      = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle   = element_text(hjust = 0.5, size = 10),
+    legend.position = "bottom"
+  )
+
+comp_change_map <- ggplot(map_data) +
+  geom_sf(aes(fill = comp_change_pts), colour = "black", linewidth = 0.15) +
+  scale_fill_gradient2(
+    low = "#E66101", mid = "white", high = "#5E3C99", midpoint = 0,
+    na.value = "grey85",
+    name = "\u0394 Competitive %\n(sim avg \u2212 actual, pts)"
+  ) +
+  labs(
+    title    = "Change in District Competitiveness: 692-Seat Simulations vs. Actual (435) Plans",
+    subtitle = "Grey = No Actual Plan Comparison Available"
+  ) +
+  theme_void(base_size = 13) +
+  theme(
+    plot.title      = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle   = element_text(hjust = 0.5, size = 10),
+    legend.position = "bottom"
+  )
+
+save_fig(bias_change_map, "bias_change_map", width = 11, height = 7)
+save_fig(comp_change_map, "comp_change_map", width = 11, height = 7)
+
+bias_change_map
+comp_change_map
+```
+
+# 9 Benchmark Scorecard
+
+```{r}
+
+n_tested_bias <- sum(!is.na(comparison$bias_outlier))
+n_tested_comp <- sum(!is.na(comparison$comp_outlier))
+n_sig_bias    <- sum(comparison$bias_outlier, na.rm = TRUE)
+n_sig_comp    <- sum(comparison$comp_outlier, na.rm = TRUE)
+
+tbl8 <- tibble(
+  Benchmark = c(
+    "1a. Mean interstate Pop/Rep",
+    "1b. SD interstate Pop/Rep",
+    "1c. Max/Min Pop/Rep ratio",
+    "2a. Mean partisan bias",
+    "2b. Share of plans/states: Pro-Republican",
+    "2c. Share of plans/states: Pro-Democratic",
+    "2d. States with significant bias divergence",
+    "3a. Mean % competitive districts",
+    "3b. SD % competitive districts",
+    "3c. States with significant competitiveness divergence"
+  ),
+  `Actual 435-Seat System` = c(
+    scales::comma(round(mean(state_pops$pop_per_rep_435))),
+    scales::comma(round(sd(state_pops$pop_per_rep_435))),
+    format(round(max(state_pops$pop_per_rep_435)/min(state_pops$pop_per_rep_435), 2), nsmall = 2),
+    format(round(mean(actual_state$bias, na.rm=TRUE), 4), nsmall = 4),
+    format(round(mean(actual_state$bias_dir=="Pro-Republican", na.rm=TRUE), 3), nsmall = 3),
+    format(round(mean(actual_state$bias_dir=="Pro-Democratic", na.rm=TRUE), 3), nsmall = 3),
+    "—",
+    format(round(mean(actual_state$pct_comp, na.rm=TRUE), 3), nsmall = 3),
+    format(round(sd(actual_state$pct_comp, na.rm=TRUE), 3), nsmall = 3),
+    "—"
+  ),
+  `Simulated 692-Seat (Cube Root Rule)` = c(
+    scales::comma(round(mean(state_pops$pop_per_rep_692))),
+    scales::comma(round(sd(state_pops$pop_per_rep_692))),
+    format(round(max(state_pops$pop_per_rep_692)/min(state_pops$pop_per_rep_692), 2), nsmall = 2),
+    format(round(mean(results_692$mean_median_diff, na.rm=TRUE), 4), nsmall = 4),
+    format(round(mean(results_692$bias_dir=="Pro-Republican", na.rm=TRUE), 3), nsmall = 3),
+    format(round(mean(results_692$bias_dir=="Pro-Democratic", na.rm=TRUE), 3), nsmall = 3),
+    sprintf("%d / %d states", n_sig_bias, n_tested_bias),
+    format(round(mean(results_692$pct_competitive, na.rm=TRUE), 3), nsmall = 3),
+    format(round(sd(sim_avgs$avg_comp, na.rm=TRUE), 3), nsmall = 3),
+    sprintf("%d / %d states", n_sig_comp, n_tested_comp)
+  )
+)
+
+tbl8_kable <- tbl8 %>%
+  kable(align = c("l","r","r"),
+        caption = tbl_title("Benchmark Scorecard"),
+        escape  = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped","hover","bordered"),
+                full_width = FALSE, position = "center") %>%
+  pack_rows("Benchmark 1: Interstate Population Parity", 1, 3) %>%
+  pack_rows("Benchmark 2: Partisan Bias",               4, 7) %>%
+  pack_rows("Benchmark 3: Competitiveness",             8, 10) %>%
+  row_spec(0, bold = TRUE)
+
+tbl8_kable
+
+save_kable_png(tbl8_kable, "scorecard")
+
+```
